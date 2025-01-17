@@ -9,14 +9,65 @@ from datetime import datetime
 from PIL import Image, ImageTk
 
 
-# ============================================= Funções =============================================
+# ============================================= Classes =============================================
 
-# Função para atualizar as tabelas ------------------------------------------
-def atualizar_tabelas():
-    # Carregar novamente os dados
-    exibir_tabelas()
-    messagebox.showinfo("Sucesso", "Tabelas atualizadas com sucesso!")
+# Classe do dropdown que filtra ---------------------------------------------
+class SearchableCombobox(ttk.Combobox):
+    def __init__(self, master, *args, **kwargs):
+        super().__init__(master, *args, **kwargs)
+
+        # Store the original list of values
+        self.original_values = self['values']
+        self._filtered_values = self.original_values  # Start with the full list
+
+        # Bind key release event to filter the list based on input
+        self.bind('<KeyRelease>', self.on_keyrelease)
+        self.bind('<FocusIn>', self.on_focusin)
+
+    def on_keyrelease(self, event):
+        """
+        Handle the key release event to filter the list based on input.
+        """
+        # Get the current input and convert it to lowercase for case-insensitive matching
+        value = self.get().lower()
+
+        if value == '':  # If input is empty, show the full list
+            self._filtered_values = self.original_values
+        else:  # Filter the list based on the input
+            self._filtered_values = [item for item in self.original_values if value in item.lower()]
+
+        # Update the combobox with the filtered values
+        self.update_suggestions()
+
+    def on_focusin(self, event=None):
+        """
+        Handle the focus-in event to update the suggestions when the combobox is focused.
+        """
+        self.update_suggestions()
+
+    def update_suggestions(self):
+        """
+        Update the combobox dropdown with the filtered values.
+        """
+        # Only update the values dropdown if there's a change in filtered list
+        self['values'] = self._filtered_values
+
+        # If the current input is not in the filtered list, set it back
+        if self.get() not in self._filtered_values:
+            self.set(self.get())  # Retain the current input
+
+    def get_selected(self):
+        """
+        Get the selected value from the combobox.
+        """
+        return self.get()
+
 # ---------------------------------------------------------------------------
+
+            
+            
+
+# ============================================= Funções =============================================
 
 # Função para carregar as tabelas de Apontamentos e Refugos -----------------
 def carregar_tabelas():
@@ -85,17 +136,23 @@ def carregar_ferramentas():
 # ---------------------------------------------------------------------------
 
 # Função para filtrar as opções do dropdown ---------------------------------
-def filtrar_opcoes(event):
-    texto_digitado = dropdown_var.get().lower()
-    if texto_digitado == "":
-        dropdown["values"] = ferramentas
+def check_input(event):
+    value = event.widget.get()
+
+    if value == '':
+        dropdown['values'] = ferramentas
     else:
-        dropdown["values"] = [f for f in ferramentas if texto_digitado in f.lower()]
+        data = []
+        for item in ferramentas:
+            if value.lower() in item.lower():
+                data.append(item)
+
+        dropdown['values'] = data
 # ---------------------------------------------------------------------------
 
 # Função para salvar apontamento com tipos e formatação ---------------------
 def salvar_apontamento(planilha_nome):
-    ferramenta = dropdown_var.get()
+    ferramenta = dropdown.get()
     quantidade = input_quantidade.get()
 
     if not ferramenta or not quantidade:
@@ -157,16 +214,18 @@ def salvar_apontamento(planilha_nome):
         book.close()
 
         messagebox.showinfo("Sucesso", f"{planilha_nome} salvo com sucesso!")
-        dropdown_var.set("")  # Limpar o valor selecionado do dropdown
+        dropdown.set("")  # Limpar o valor selecionado do dropdown
         input_quantidade.delete(0, "end")  # Limpar o campo de quantidade
 
     except Exception as e:
         messagebox.showerror("Erro", f"Não foi possível salvar o apontamento: {e}")
+        
+    refresh_data()
 # ---------------------------------------------------------------------------
 
 # Função para abrir a janela de apontamento ---------------------------------
 def abrir_janela_apontamento():
-    global janela_apontamento, dropdown, dropdown_var, input_quantidade, ferramentas
+    global janela_apontamento, dropdown, input_quantidade, ferramentas
 
     ferramentas = carregar_ferramentas()
     if not ferramentas:
@@ -176,14 +235,13 @@ def abrir_janela_apontamento():
     janela_apontamento.title("Criar Apontamento")
     janela_apontamento.geometry("460x200")  # Aumenta o tamanho da janela
     janela_apontamento.config(bg="#f0f0f0")  # Cor de fundo clara
+    janela_apontamento.grab_set() 
 
     tk.Label(janela_apontamento, text="Ferramenta:", font=("Arial", 12), bg="#f0f0f0").grid(row=0, column=0, padx=20, pady=20, sticky="w")
+    
 
-    # Dropdown com funcionalidade de filtro
-    dropdown_var = tk.StringVar()
-    dropdown = ttk.Combobox(janela_apontamento, textvariable=dropdown_var, values=ferramentas, width=18, font=("Arial", 12))
-    dropdown.grid(row=0, column=1, padx=20, pady=20)
-    dropdown.bind("<KeyRelease>", filtrar_opcoes)  # Evento para detectar digitação e filtrar
+    dropdown = SearchableCombobox(janela_apontamento, values=ferramentas, font=("Arial", 12), width=18)
+    dropdown.grid(row=0, column=1, padx=20, pady=20)  # Position the dropdown
 
     tk.Label(janela_apontamento, text="Quantidade:", font=("Arial", 12), bg="#f0f0f0").grid(row=1, column=0, padx=20, pady=10, sticky="w")
     input_quantidade = tk.Entry(janela_apontamento, font=("Arial", 12), width=20)
@@ -236,13 +294,13 @@ def enviar_relatorio():
     # Filtrar apenas pela data, ignorando o horário
     refugos = refugos[refugos['Data e Hora'].dt.date == hoje.date()]
     
-    arquivo_saida = os.path.abspath("refugos_filtrados.xlsx")
+    arquivo_saida = os.path.abspath("Relatorio_Refugos.xlsx")
     refugos.to_excel(arquivo_saida, index=False, engine='openpyxl')
     
     
-    recipient = "Destinatário"
-    email_subject = "Assunto"
-    email_body = "Corpo"
+    recipient = "Cleverson.Veiga@br.bosch.com"
+    email_subject = "Refugos do dia "+str(datetime.now().strftime("%d/%m/%Y"))
+    email_body = "Olá,\nSegue em anexo os refugos apontados no processo de formação de lote no dia de hoje"
 
     create_outlook_email(recipient, email_subject, email_body, attachment_path=arquivo_saida)
 # ---------------------------------------------------------------------------
@@ -286,7 +344,6 @@ def refresh_data():
     for _, row in refugos.iterrows():
         tree_refugos.insert("", "end", values=list(row))
         
-    messagebox.showinfo("Sucesso", "Tabelas atualizadas com sucesso!")
 # ---------------------------------------------------------------------------
 
 # Funçaõ para alterar o tamanho do cabeçalho --------------------------------
@@ -335,8 +392,8 @@ btn_criar.grid(row=0, column=0, padx=20)
 btn_enviar = tk.Button(frame_botoes, text="Enviar Relatório\nde refugos", command=enviar_relatorio, font=("Arial", 15), bg="#1AA4CB", fg="white", relief="flat", width=13, height=2)
 btn_enviar.grid(row=0, column=1, padx=20)
 
-# Botão de Refresh
-btn_refresh = tk.Button(frame_botoes, text="Atualizar Dados", command=refresh_data, font=("Arial", 15), bg="#193D80", fg="white", relief="flat", width=13, height=2)
+# Botão Atualizar
+btn_refresh = tk.Button(frame_botoes, text="Atualizar", command=refresh_data, font=("Arial", 15), bg="#593A8E", fg="white", relief="flat", width=13, height=2)
 btn_refresh.grid(row=0, column=2, padx=20)
 
 # Frame para as tabelas
